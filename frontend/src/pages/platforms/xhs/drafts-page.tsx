@@ -35,9 +35,11 @@ import {
   message as antMessage,
   Modal,
   Popconfirm,
+  Radio,
   Row,
   Space,
   Spin,
+  Switch,
   Tabs,
   Tag,
   Typography,
@@ -46,6 +48,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { ComplianceGuardCard } from "../../../components/compliance/compliance-guard";
 import { PageHeader } from "../../../components/layout/app-shell";
 import {
   addDraftAsset,
@@ -57,6 +60,7 @@ import {
   fetchSavedNote,
   fetchUserImages,
   generateImageWithAi,
+  generateTcmNihaixiaDraft,
   reorderDraftAssets,
   sendDraftToPublish,
   updateDraft,
@@ -187,6 +191,35 @@ export function XhsDraftsPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [refPickerOpen, setRefPickerOpen] = useState(false);
   const [refPickerUrlInput, setRefPickerUrlInput] = useState("");
+
+  const [tcmModalOpen, setTcmModalOpen] = useState(false);
+  const [tcmAngle, setTcmAngle] = useState<"tool_sharing" | "cold_fever" | "spleen_stomach" | "custom">("tool_sharing");
+  const [tcmCustomTopic, setTcmCustomTopic] = useState("");
+  const [tcmCustomTitle, setTcmCustomTitle] = useState("");
+  const [tcmAttachImages, setTcmAttachImages] = useState(true);
+  const [isGeneratingTcm, setIsGeneratingTcm] = useState(false);
+
+  async function handleGenerateTcm() {
+    setIsGeneratingTcm(true);
+    try {
+      const newDraft = await generateTcmNihaixiaDraft({
+        angle: tcmAngle,
+        custom_topic: tcmCustomTopic,
+        custom_title: tcmCustomTitle,
+        attach_promo_images: tcmAttachImages,
+      });
+      antMessage.success("成功生成合规经方种草草稿！");
+      setTcmModalOpen(false);
+      await loadDrafts();
+      selectDraft(newDraft);
+      const assetsRes = await fetchDraftAssets(newDraft.id);
+      setSourceAssets(assetsRes.items);
+    } catch {
+      antMessage.error("生成经方草稿失败，请重试。");
+    } finally {
+      setIsGeneratingTcm(false);
+    }
+  }
 
   const selectedDraft = drafts.find((d) => d.id === selectedDraftId) ?? null;
   const hasImageAssets = sourceAssets.some((a) => a.asset_type === "image");
@@ -643,13 +676,23 @@ export function XhsDraftsPage() {
         title="草稿库"
         description="管理所有 AI 改写草稿，编辑内容和素材后送入发布中心。"
         action={
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={loadDrafts}
-            loading={isLoading}
-          >
-            刷新
-          </Button>
+          <Space>
+            <Button
+              type="primary"
+              icon={<ExperimentOutlined />}
+              onClick={() => setTcmModalOpen(true)}
+              style={{ background: "#722ed1", borderColor: "#722ed1" }}
+            >
+              🌿 倪师经方 · 一键合规种草
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={loadDrafts}
+              loading={isLoading}
+            >
+              刷新
+            </Button>
+          </Space>
         }
       />
 
@@ -1134,6 +1177,16 @@ export function XhsDraftsPage() {
                 )}
               </Modal>
 
+              {/* Compliance Guard Panel */}
+              <ComplianceGuardCard
+                title={title}
+                body={body}
+                onApplyCleaned={(cleanedTitle, cleanedBody) => {
+                  setTitle(cleanedTitle);
+                  setBody(cleanedBody);
+                }}
+              />
+
               {/* Editor card */}
               <Card title="编辑器">
                 <Form layout="vertical">
@@ -1237,6 +1290,123 @@ export function XhsDraftsPage() {
           )}
         </Col>
       </Row>
+
+      <Modal
+        title={
+          <Space>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>🌿 倪海厦 · 中医经方合规种草生成器</span>
+            <Tag color="green">已开启小红书防封护航</Tag>
+          </Space>
+        }
+        open={tcmModalOpen}
+        onCancel={() => setTcmModalOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setTcmModalOpen(false)}>
+            取消
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={isGeneratingTcm}
+            onClick={handleGenerateTcm}
+            style={{ background: "#722ed1", borderColor: "#722ed1" }}
+          >
+            立即生成草稿
+          </Button>,
+        ]}
+        width={680}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
+          <Alert
+            type="info"
+            showIcon
+            message="🛡️ 自动规避小红书医疗违规限制"
+            description="本生成器深度整合去AI感第一人称口吻，严格剔除“包治百病、神药、绝对根治”等违规医疗宣称；以真实的日常经验交流+查方做站心路历程为切入点，文末强制植入合规免责声明，并在评论区预埋引流互动钩子。"
+          />
+
+          <div>
+            <Text strong style={{ display: "block", marginBottom: 8 }}>
+              🎯 选择笔记切入角度：
+            </Text>
+            <Radio.Group
+              value={tcmAngle}
+              onChange={(e) => setTcmAngle(e.target.value)}
+              style={{ display: "flex", flexDirection: "column", gap: 10 }}
+            >
+              <Radio value="tool_sharing">
+                <div>
+                  <Text strong>🌟 查方太累做网站 · 痛点共鸣型（强力推荐）</Text>
+                  <Paragraph type="secondary" style={{ margin: "2px 0 0 0", fontSize: 12 }}>
+                    “有没有用倪海厦老师经方解决过小病的朋友？因为每次查药方翻书找剂量太累，花了几个月总结制作了一个速查网站…”
+                  </Paragraph>
+                </div>
+              </Radio>
+              <Radio value="cold_fever">
+                <div>
+                  <Text strong>🍵 换季受寒打喷嚏 · 小病经方自用交流</Text>
+                  <Paragraph type="secondary" style={{ margin: "2px 0 0 0", fontSize: 12 }}>
+                    “换季空调吹感冒，大家平时用倪师讲的哪张经方？自己整理了经方速查站对照…”
+                  </Paragraph>
+                </div>
+              </Radio>
+              <Radio value="spleen_stomach">
+                <div>
+                  <Text strong>🌾 舌苔厚白/早起口苦 · 脾胃湿气调理心得</Text>
+                  <Paragraph type="secondary" style={{ margin: "2px 0 0 0", fontSize: 12 }}>
+                    “倪海厦老师讲脾胃湿气真的透彻！花心血整理了390首方剂与批注，现在对照着看…”
+                  </Paragraph>
+                </div>
+              </Radio>
+              <Radio value="custom">
+                <div>
+                  <Text strong>✍️ 自定义经方话题</Text>
+                  <Paragraph type="secondary" style={{ margin: "2px 0 0 0", fontSize: 12 }}>
+                    输入自定义的中医病症或经方话题，自动按合规模版融合生成
+                  </Paragraph>
+                </div>
+              </Radio>
+            </Radio.Group>
+          </div>
+
+          {tcmAngle === "custom" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, background: "rgba(255,255,255,0.03)", borderRadius: 6 }}>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>话题方向（如：失眠心烦 / 妇科调理 / 手脚冰凉）：</Text>
+                <Input
+                  placeholder="例如：手脚冰凉温阳经方"
+                  value={tcmCustomTopic}
+                  onChange={(e) => setTcmCustomTopic(e.target.value)}
+                  style={{ marginTop: 4 }}
+                />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>自定义标题（选填，留空将自动生成）：</Text>
+                <Input
+                  placeholder="留空则自动生成高点击率爆款疑问句"
+                  value={tcmCustomTitle}
+                  onChange={(e) => setTcmCustomTitle(e.target.value)}
+                  style={{ marginTop: 4 }}
+                />
+              </div>
+            </div>
+          )}
+
+          <Divider style={{ margin: "8px 0" }} />
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <Text strong>自动挂载网站高清实抓配图</Text>
+              <Paragraph type="secondary" style={{ margin: 0, fontSize: 12 }}>
+                自动从本地 promo_assets 导入方剂速查网站的首页卡片、搜索界面、处方对比图等 4 张配图
+              </Paragraph>
+            </div>
+            <Switch
+              checked={tcmAttachImages}
+              onChange={setTcmAttachImages}
+            />
+          </div>
+        </div>
+      </Modal>
 
       {previewImage && (
         <Image

@@ -33,6 +33,7 @@ import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 
+import { ComplianceGuardCard } from "../../../components/compliance/compliance-guard";
 import { PageHeader } from "../../../components/layout/app-shell";
 import {
   deletePublishJob,
@@ -396,6 +397,24 @@ export function XhsPublishPage() {
                       </Col>
                     </Row>
                   </Card>
+
+                  {/* Compliance Guard Panel */}
+                  <ComplianceGuardCard
+                    title={selectedJob.title}
+                    body={selectedJob.body}
+                    compact={true}
+                    onApplyCleaned={async (cleanedTitle, cleanedBody) => {
+                      try {
+                        const updated = await updatePublishJob(selectedJob.id, {
+                          title: cleanedTitle,
+                          body: cleanedBody,
+                        });
+                        setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+                      } catch (e) {
+                        console.error("Failed to update sanitized job", e);
+                      }
+                    }}
+                  />
 
                   <Row gutter={16}>
                     {/* Content Preview (read-only) */}

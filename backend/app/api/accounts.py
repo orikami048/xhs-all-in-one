@@ -118,6 +118,17 @@ def import_cookie(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cookie is invalid or expired") from exc
 
     if payload.sub_type == "pc":
+        c_dict = trans_cookies(payload.cookie_string)
+        if not c_dict.get("a1") or not c_dict.get("web_session"):
+            missing = []
+            if not c_dict.get("a1"):
+                missing.append("a1")
+            if not c_dict.get("web_session"):
+                missing.append("web_session")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cookie 缺少关键字段: {', '.join(missing)}。注意：web_session 属于 HttpOnly Cookie，无法通过控制台 document.cookie 获取。请在小红书网页端按 F12 打开「网络(Network)」面板，刷新页面后点击任意请求，在「请求标头(Request Headers)」中复制完整的 Cookie 值；或者直接使用系统扫码登录。",
+            )
         try:
             self_profile = self_profile_adapter.get_self_profile(cookie_header_from_text(payload.cookie_string))
             user_info = enrich_user_info_with_xhs_self_profile(user_info, self_profile)
@@ -189,10 +200,11 @@ def check_account(
 
         if account.sub_type == "creator":
             try:
+                from xhs_utils.xhs_creator.auth import XHSCreatorAuth
                 from apis.xhs_creator_apis import XHS_Creator_Apis
-                creator_cookies = decode_cookie_text(cookies_text)
-                api = XHS_Creator_Apis()
-                success, msg, _ = api.get_fileIds("image", creator_cookies)
+                auth = XHSCreatorAuth.from_cookie(cookie_header_from_text(cookies_text))
+                api = XHS_Creator_Apis(auth)
+                success, msg, _ = api.get_fileIds("image")
                 if not success:
                     account.status = "expired"
                     account.status_message = f"上传凭证获取失败: {msg}"

@@ -42,7 +42,7 @@ def start_frontend(port: int) -> Optional[subprocess.Popen]:
 
     command = build_frontend_command(port)
     print(f"Starting frontend at http://127.0.0.1:{port}")
-    return subprocess.Popen(command, cwd=str(frontend_dir))
+    return subprocess.Popen(command, cwd=str(frontend_dir), shell=(sys.platform == "win32"))
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

@@ -306,16 +306,27 @@ def search_notes(
     adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
 ):
     cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
-    success, message, raw_payload = adapter_factory(cookies).search_note(
-        payload.keyword,
-        page=payload.page,
-        sort_type_choice=payload.sort_type_choice,
-        note_type=payload.note_type,
-        note_time=payload.note_time,
-        note_range=payload.note_range,
-        pos_distance=payload.pos_distance,
-        geo=payload.geo,
-    )
+    try:
+        success, message, raw_payload = adapter_factory(cookies).search_note(
+            payload.keyword,
+            page=payload.page,
+            sort_type_choice=payload.sort_type_choice,
+            note_type=payload.note_type,
+            note_time=payload.note_time,
+            note_range=payload.note_range,
+            pos_distance=payload.pos_distance,
+            geo=payload.geo,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"账号 Cookie 校验失败: {exc}。请重新扫码登录，或从浏览器 F12「网络」面板复制完整 Cookie（含 web_session）。",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"搜索执行失败: {exc}",
+        ) from exc
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -352,7 +363,18 @@ def note_detail(
     adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
 ):
     cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
-    success, message, raw_payload = adapter_factory(cookies).get_note_info(payload.url)
+    try:
+        success, message, raw_payload = adapter_factory(cookies).get_note_info(payload.url)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"账号 Cookie 校验失败: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取笔记详情失败: {exc}",
+        ) from exc
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -369,7 +391,18 @@ def note_comments(
     adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
 ):
     cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
-    success, message, raw_payload = adapter_factory(cookies).get_note_comments(payload.note_url)
+    try:
+        success, message, raw_payload = adapter_factory(cookies).get_note_comments(payload.note_url)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"账号 Cookie 校验失败: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取评论失败: {exc}",
+        ) from exc
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

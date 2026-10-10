@@ -31,7 +31,7 @@ class XhsPcLoginAdapter:
         status = "confirmed" if success else "pending"
         if "过期" in message or "expired" in message.lower():
             status = "expired"
-        if "确认" in message or "confirm" in message.lower():
+        elif not success and ("请确认登录" in message or message == "scanned"):
             status = "scanned"
         return {"status": status, "cookies": updated_cookies}
 
@@ -40,19 +40,22 @@ class XhsPcLoginAdapter:
             from apis.xhs_pc_login_apis import XHSLoginApi
 
             api = XHSLoginApi()
-            success, data, _ = api.get_user_info(cookies)
-        if not success:
-            raise RuntimeError("Failed to fetch XHS user info")
+            try:
+                success, data, _ = api.get_user_info(cookies)
+            except Exception:
+                success, data = False, {}
+        user_id = (data or {}).get("user_id") or ""
+        nickname = (data or {}).get("nickname") or "小红书用户"
         return {
-            "external_user_id": data.get("user_id", ""),
-            "nickname": data.get("nickname", ""),
-            "avatar_url": data.get("images") or data.get("imageb") or "",
+            "external_user_id": user_id,
+            "nickname": nickname,
+            "avatar_url": (data or {}).get("images") or (data or {}).get("imageb") or "",
             "profile": {
-                "red_id": data.get("red_id") or data.get("redId") or "",
-                "followers": data.get("fans") or data.get("followers") or data.get("follower_count"),
-                "following": data.get("follows") or data.get("following") or data.get("following_count"),
-                "likes": data.get("liked_count") or data.get("likes") or data.get("like_count"),
-                "raw": data,
+                "red_id": (data or {}).get("red_id") or (data or {}).get("redId") or "",
+                "followers": (data or {}).get("fans") or (data or {}).get("followers") or (data or {}).get("follower_count"),
+                "following": (data or {}).get("follows") or (data or {}).get("following") or (data or {}).get("following_count"),
+                "likes": (data or {}).get("liked_count") or (data or {}).get("likes") or (data or {}).get("like_count"),
+                "raw": data or {},
             },
         }
 

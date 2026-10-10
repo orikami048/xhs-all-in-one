@@ -110,7 +110,7 @@ def _payload_items(raw_payload: Any) -> list[Any]:
     if not isinstance(raw_payload, dict):
         return []
     data = raw_payload.get("data") if isinstance(raw_payload.get("data"), dict) else raw_payload
-    for key in ("items", "list", "notes", "topics", "pois"):
+    for key in ("items", "list", "notes", "topics", "pois", "topic_info_dtos", "poi_list"):
         value = data.get(key)
         if isinstance(value, list):
             return value

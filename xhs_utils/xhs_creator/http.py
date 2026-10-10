@@ -7,7 +7,7 @@ from typing import Optional
 from xhs_utils.xhs_core.http import BrowserHttpClient
 
 
-CREATOR_IMPERSONATE = 'chrome146'
+CREATOR_IMPERSONATE = 'chrome124'
 CREATOR_ACCEPT_ENCODING = 'gzip, deflate, br, zstd'
 CREATOR_HTTP_VERSION = 'v2tls'
 

@@ -85,7 +85,8 @@ class XhsCreatorApiAdapter:
         return payload or {}
 
     def _post_uploaded_image_note(self, note_info: dict[str, Any]) -> dict[str, Any]:
-        from apis.xhs_creator_apis import XHS_Creator_Apis
+        import time
+        from apis.xhs_creator_apis import CREATOR_PUBLISH_REFERER, XHS_Creator_Apis
         from xhs_utils.http_util import REQUEST_TIMEOUT
         from xhs_utils.xhs_creator import XHSCreatorAuth
         from xhs_utils.xhs_creator_util import (
@@ -120,7 +121,7 @@ class XhsCreatorApiAdapter:
             note_info.get("desc", ""),
             note_info.get("postTime"),
             post_loc,
-            note_info.get("type", 1),
+            note_info.get("type", 0),
             note_info["image_file_infos"],
         )
         # 浏览器实抓：未选地点时省略 post_loc 键，空对象会被服务端以参数错误打回
@@ -129,42 +130,59 @@ class XhsCreatorApiAdapter:
         for topic in note_info.get("topics") or []:
             if not isinstance(topic, str) or not topic.strip():
                 continue
-            success, message, topic_payload = api.get_topic(topic.strip())
-            if not success:
-                raise RuntimeError(message or "Creator topic lookup failed")
-            topic_items = (topic_payload.get("data") or {}).get("topic_info_dtos") or []
-            if not topic_items:
-                raise RuntimeError(f"未找到话题{topic}")
-            item = topic_items[0]
-            insert_topic = {
-                "id": item["id"],
-                "link": item.get("link", ""),
-                "name": item["name"],
-                "type": "topic",
-            }
-            data["common"]["hash_tag"].append(insert_topic)
-            data["common"]["desc"] += f" #{insert_topic['name']}[话题]# "
-        headers, cookies, body = api._request_params(
-            post_api,
-            data,
-            "POST",
-            referer=f"{api.base_url}/",
-            target_origin=api.edith_url,
-            order_wire_headers=False,
-        )
-        headers["x-rap-param"] = generate_x_rap_param(
-            post_api,
-            body,
-            fingerprint_hex=load_creator_rap_fingerprint_hex(),
-        )
-        response = api.http.post(
-            api.edith_url + post_api,
-            headers=headers,
-            data=body.encode("utf-8"),
-            cookies=cookies,
-            timeout=REQUEST_TIMEOUT,
-        )
-        payload = response.json()
+            clean_topic = topic.strip().lstrip("#")
+            try:
+                success, message, topic_payload = api.get_topic(clean_topic)
+                topic_items = (topic_payload.get("data") or {}).get("topic_info_dtos") or [] if success and topic_payload else []
+                if topic_items:
+                    item = topic_items[0]
+                    insert_topic = {
+                        "id": item["id"],
+                        "link": item.get("link", ""),
+                        "name": item["name"],
+                        "type": "topic",
+                    }
+                    data["common"]["hash_tag"].append(insert_topic)
+                    if f"#{item['name']}" not in data["common"]["desc"]:
+                        data["common"]["desc"] += f" #{insert_topic['name']}[话题]# "
+                else:
+                    if f"#{clean_topic}" not in data["common"]["desc"]:
+                        data["common"]["desc"] += f" #{clean_topic} "
+            except Exception:
+                if f"#{clean_topic}" not in data["common"]["desc"]:
+                    data["common"]["desc"] += f" #{clean_topic} "
+        payload = {}
+        for attempt in range(3):
+            headers, cookies, body = api._request_params(
+                post_api,
+                data,
+                "POST",
+                referer=CREATOR_PUBLISH_REFERER,
+                target_origin=api.edith_url,
+                b1_profile="note_manager",
+                mns_profile="note_manager",
+                order_wire_headers=False,
+            )
+            headers["x-rap-param"] = generate_x_rap_param(
+                post_api,
+                body,
+                fingerprint_hex=load_creator_rap_fingerprint_hex(),
+            )
+            response = api.http.post(
+                api.edith_url + post_api,
+                headers=headers,
+                data=body.encode("utf-8"),
+                cookies=cookies,
+                timeout=REQUEST_TIMEOUT,
+            )
+            payload = response.json()
+            if payload.get("success"):
+                break
+            if payload.get("code") != -1:
+                break
+            if attempt < 2:
+                time.sleep(2)
+
         if not payload.get("success"):
             raise RuntimeError(
                 payload.get("msg") or payload.get("message") or "Creator note publish failed"

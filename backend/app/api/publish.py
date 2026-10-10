@@ -505,7 +505,7 @@ def publish_job_to_creator(
         "desc": job.body,
         "media_type": "image",
         "image_file_infos": image_file_infos,
-        "type": 1,
+        "type": 0,
         "postTime": _scheduled_post_time(job),
     }
     _apply_publish_options(note_info, _load_publish_options(job))

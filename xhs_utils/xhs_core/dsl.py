@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import tempfile
 import threading
 import time
 from typing import Optional
@@ -27,6 +30,31 @@ class DsFetcher:
         self._program: Optional[str] = None
         self._fetched_at = 0.0
         self._lock = threading.Lock()
+        self._cache_file = os.path.join(tempfile.gettempdir(), f'xhs_ds_cache_{self.app_id}.json')
+        self._load_disk_cache()
+
+    def _load_disk_cache(self) -> None:
+        try:
+            if os.path.exists(self._cache_file):
+                with open(self._cache_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if data.get('value') and data.get('program'):
+                        self._value = str(data['value'])
+                        self._program = str(data['program'])
+                        self._fetched_at = float(data.get('fetched_at', 0.0))
+        except Exception:
+            pass
+
+    def _save_disk_cache(self, value: str, program: str, fetched_at: float) -> None:
+        try:
+            with open(self._cache_file, 'w', encoding='utf-8') as f:
+                json.dump(
+                    {'value': value, 'program': program, 'fetched_at': fetched_at},
+                    f,
+                    ensure_ascii=False,
+                )
+        except Exception:
+            pass
 
     @property
     def url(self) -> str:
@@ -67,6 +95,7 @@ class DsFetcher:
                 self._value = value
                 self._program = program
                 self._fetched_at = now
+                self._save_disk_cache(value, program, now)
                 return value, program
             except Exception as exc:
                 if self._value and self._program:
@@ -89,29 +118,43 @@ class DsFetcher:
             'Referer': self.referer,
             'Accept': '*/*',
         }
-        if http_client is None:
-            import requests
+        last_exc: Optional[Exception] = None
+        for attempt in range(2):
+            try:
+                response = None
+                if http_client is not None:
+                    try:
+                        response = http_client.get(
+                            self.url,
+                            headers=headers,
+                            proxies=proxies,
+                            timeout=15,
+                        )
+                    except Exception as client_err:
+                        last_exc = client_err
+                if response is None:
+                    import requests
 
-            response = requests.get(
-                self.url,
-                headers=headers,
-                proxies=proxies,
-                timeout=8,
-            )
-        else:
-            response = http_client.get(
-                self.url,
-                headers=headers,
-                proxies=proxies,
-                timeout=8,
-            )
-        response.raise_for_status()
-        match = _GETDSS_RE.search(response.text)
-        if not match:
-            raise ValueError('ds response does not contain getdss()')
-        if '_dsf' not in response.text and '__$c' not in response.text:
-            raise ValueError('ds response does not contain the DS runtime program')
-        return match.group(1), response.text
+                    response = requests.get(
+                        self.url,
+                        headers=headers,
+                        proxies=proxies,
+                        timeout=15,
+                    )
+                response.raise_for_status()
+                match = _GETDSS_RE.search(response.text)
+                if not match:
+                    raise ValueError('ds response does not contain getdss()')
+                if '_dsf' not in response.text and '__$c' not in response.text:
+                    raise ValueError('ds response does not contain the DS runtime program')
+                return match.group(1), response.text
+            except Exception as e:
+                last_exc = e
+                time.sleep(0.5)
+
+        if last_exc:
+            raise last_exc
+        raise RuntimeError('Unknown error fetching ds')
 
     def peek(self) -> Optional[str]:
         return self._value
@@ -121,3 +164,4 @@ class DsFetcher:
 
 
 __all__ = ['DsFetcher']
+

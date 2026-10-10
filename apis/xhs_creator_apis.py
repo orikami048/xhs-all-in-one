@@ -238,7 +238,10 @@ class XHS_Creator_Apis:
                 api,
                 data,
                 'POST',
+                referer=CREATOR_PUBLISH_REFERER,
                 target_origin=self.edith_url,
+                b1_profile='note_manager',
+                mns_profile='note_manager',
             )
             response = self.http.post(
                 self.edith_url + api,
@@ -249,7 +252,8 @@ class XHS_Creator_Apis:
                 timeout=REQUEST_TIMEOUT,
             )
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = bool(res_json.get("success", False))
+            msg = res_json.get("msg") or res_json.get("message") or ("成功" if success else "获取话题失败")
         except Exception as error:
             res_json = None
             success, msg = False, _log_api_error(error)
@@ -263,7 +267,10 @@ class XHS_Creator_Apis:
                 api,
                 data,
                 'POST',
+                referer=CREATOR_PUBLISH_REFERER,
                 target_origin=self.edith_url,
+                b1_profile='note_manager',
+                mns_profile='note_manager',
             )
             response = self.http.post(
                 self.edith_url + api,
@@ -274,7 +281,8 @@ class XHS_Creator_Apis:
                 timeout=REQUEST_TIMEOUT,
             )
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = bool(res_json.get("success", False))
+            msg = res_json.get("msg") or res_json.get("message") or ("成功" if success else "获取位置信息失败")
         except Exception as error:
             res_json = None
             success, msg = False, _log_api_error(error)
@@ -441,7 +449,8 @@ class XHS_Creator_Apis:
                 timeout=REQUEST_TIMEOUT,
             )
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = bool(res_json.get("success", False))
+            msg = res_json.get("msg") or res_json.get("message") or ("成功" if success else "加密失败")
         except Exception as error:
             success, msg = False, _log_api_error(error)
         return success, msg, res_json
@@ -453,7 +462,7 @@ class XHS_Creator_Apis:
         desc = noteInfo.get('desc', '')
         postTime = noteInfo.get('postTime')
         location = noteInfo.get('location')
-        privacy_type = noteInfo.get('type', 1)
+        privacy_type = noteInfo.get('type', 0)
         media_type = noteInfo.get('media_type', 'image')
 
         if location is not None:

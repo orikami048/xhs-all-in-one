@@ -13,7 +13,7 @@ from typing import Any, Optional
 from curl_cffi import requests as curl_requests
 
 
-DEFAULT_IMPERSONATE = 'chrome146'
+DEFAULT_IMPERSONATE = 'chrome124'
 DEFAULT_ACCEPT_ENCODING = 'gzip, deflate, br, zstd'
 DEFAULT_HTTP_VERSION = 'v2tls'
 
@@ -95,7 +95,7 @@ class BrowserHttpClient:
             proxies=proxies,
             impersonate=self.impersonate,
             default_headers=False,
-            discard_cookies=True,
+            discard_cookies=False,
             http_version=self.http_version,
         )
 
@@ -147,18 +147,22 @@ class BrowserHttpClient:
             wire_headers['content-type'] = None
 
         request_proxies = self.proxies if proxies is None else proxies
-        return self.session.request(
+        resp = self.session.request(
             str(method).upper(),
             str(url),
             headers=wire_headers,
             proxies=request_proxies,
             impersonate=self.impersonate,
             default_headers=False,
-            discard_cookies=True,
+            discard_cookies=False,
             http_version=self.http_version,
             accept_encoding=self.accept_encoding,
             **kwargs,
         )
+        if hasattr(self.session, 'cookies') and self.session.cookies:
+            resp.cookies.update(self.session.cookies)
+            self.session.cookies.clear()
+        return resp
 
     def get(self, url: str, **kwargs):
         return self.request('GET', url, **kwargs)

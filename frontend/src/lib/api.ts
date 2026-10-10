@@ -130,7 +130,11 @@ http.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config as typeof error.config & { _authRetry?: boolean; _silent?: boolean };
-    if (error.response?.status !== 401 || originalRequest?._authRetry || !getRefreshToken()) {
+    const isAuthEndpoint = typeof originalRequest?.url === "string" && originalRequest.url.includes("/auth/");
+    if (error.response?.status !== 401 || originalRequest?._authRetry || isAuthEndpoint || !getRefreshToken()) {
+      if (isAuthEndpoint && error.response?.status === 401) {
+        clearAuthTokens();
+      }
       if (!originalRequest?._silent) {
         const detail = error.response?.data?.detail;
         const msg = typeof detail === "string" ? detail : "请求失败，请稍后重试";
@@ -168,9 +172,11 @@ export async function refreshAccessToken(): Promise<string> {
     throw new Error("Missing refresh token");
   }
 
-  const response = await http.post<{ access_token: string; token_type: "bearer" }>("/auth/refresh", {
-    refresh_token: refreshToken
-  });
+  const response = await http.post<{ access_token: string; token_type: "bearer" }>(
+    "/auth/refresh",
+    { refresh_token: refreshToken },
+    { _authRetry: true, _silent: true } as any
+  );
   setAccessToken(response.data.access_token);
   return response.data.access_token;
 }
@@ -182,12 +188,22 @@ export async function fetchMe(): Promise<PlatformUser> {
 
 export async function bootstrapAuth(): Promise<PlatformUser | null> {
   if (!getAccessToken() && hasRefreshToken()) {
-    await refreshAccessToken();
+    try {
+      await refreshAccessToken();
+    } catch {
+      clearAuthTokens();
+      return null;
+    }
   }
   if (!getAccessToken()) {
     return null;
   }
-  return fetchMe();
+  try {
+    return await fetchMe();
+  } catch {
+    clearAuthTokens();
+    return null;
+  }
 }
 
 export async function logout(): Promise<void> {
@@ -522,6 +538,18 @@ export async function rewriteDraftWithAi(payload: RewriteDraftPayload): Promise<
 
 export async function generateNoteWithAi(payload: GenerateNotePayload): Promise<Draft> {
   const response = await http.post<Draft>("/ai/generate-note", payload);
+  return response.data;
+}
+
+export interface GenerateTcmDraftPayload {
+  angle: "tool_sharing" | "cold_fever" | "spleen_stomach" | "custom";
+  custom_title?: string;
+  custom_topic?: string;
+  attach_promo_images?: boolean;
+}
+
+export async function generateTcmNihaixiaDraft(payload: GenerateTcmDraftPayload): Promise<Draft> {
+  const response = await http.post<Draft>("/drafts/tcm-nihaixia", payload);
   return response.data;
 }
 
@@ -874,3 +902,65 @@ export async function runAutoTask(taskId: number): Promise<AutoTaskRunResult> {
   const response = await http.post<AutoTaskRunResult>(`/auto-tasks/${taskId}/run`);
   return response.data;
 }
+
+/* ── Compliance Guard ─────────────────────────────────────────── */
+
+export interface ComplianceIssue {
+  category: string;
+  category_name: string;
+  rule_name: string;
+  severity: "high" | "medium" | "low";
+  matched_text: string;
+  location: string;
+  advice: string;
+  replacement: string;
+}
+
+export interface ComplianceReport {
+  is_valid: boolean;
+  score: number;
+  danger_count: number;
+  warning_count: number;
+  issues: ComplianceIssue[];
+  cleaned_title: string;
+  cleaned_body: string;
+}
+
+export interface ComplianceRuleCategory {
+  category_key: string;
+  name: string;
+  description: string;
+  severity: string;
+  penalty: string;
+  rules: Array<{
+    name: string;
+    advice: string;
+    replacement: string;
+  }>;
+}
+
+export async function auditContentCompliance(payload: { title: string; body: string }): Promise<ComplianceReport> {
+  const response = await http.post<ComplianceReport>("/compliance/audit", payload);
+  return response.data;
+}
+
+export async function sanitizeContentCompliance(payload: { title: string; body: string }): Promise<{
+  cleaned_title: string;
+  cleaned_body: string;
+  new_score: number;
+  is_valid: boolean;
+}> {
+  const response = await http.post<{
+    cleaned_title: string;
+    cleaned_body: string;
+    new_score: number;
+    is_valid: boolean;
+  }>("/compliance/sanitize", payload);
+  return response.data;
+}
+
+export async function fetchComplianceRules(): Promise<{ categories: ComplianceRuleCategory[] }> {
+  const response = await http.get<{ categories: ComplianceRuleCategory[] }>("/compliance/rules");
+  return response.data;
+}
+

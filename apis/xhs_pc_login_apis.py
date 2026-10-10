@@ -590,7 +590,11 @@ class XHSLoginApi:
             return False, res.get('msg', '二维码状态响应缺少 codeStatus'), cookies
 
         if status == 2:
-            cookies = self._login_by_qrcode_status(qr_id, code, cookies)
+            try:
+                cookies = self._login_by_qrcode_status(qr_id, code, cookies)
+            except Exception as e:
+                logger.error(f'[_login_by_qrcode_status error]: {e}', exc_info=True)
+                return False, f'确认登录失败: {e}', cookies
 
         status_map = {
             0: (False, '请扫描二维码'),
@@ -631,15 +635,24 @@ class XHSLoginApi:
             ),
         )
 
+        if resp.status_code == 471 or 'verifytype' in {str(k).lower() for k in resp.headers}:
+            verify_type = resp.headers.get('verifytype') or resp.headers.get('VerifyType') or '124'
+            raise RuntimeError(f'触发小红书安全风控验证(HTTP 471, VerifyType: {verify_type})，当前网络环境被小红书风控，请改用「导入 Cookie」方式绑定')
+
         res = resp.json()
         data = res.get('data') or {}
-        if not res.get('success') or data.get('code_status') != 2:
+        code_status = data.get('code_status') if data.get('code_status') is not None else data.get('codeStatus')
+        login_info = data.get('login_info') or data.get('loginInfo') or {}
+        session = str(login_info.get('session') or data.get('session') or '')
+
+        if not res.get('success'):
             raise RuntimeError(res.get('msg') or '二维码最终登录状态无效')
-        login_info = data.get('login_info') or {}
-        session = str(login_info.get('session') or '')
+        if code_status is not None and code_status != 2 and not session:
+            raise RuntimeError(res.get('msg') or '二维码最终登录状态无效')
+
         if session:
             # Replace the anonymous session even when Set-Cookie parsing is
-            # unavailable.  Keeping the visitor session would produce a false
+            # unavailable. Keeping the visitor session would produce a false
             # login success.
             cookies.pop('web_session', None)
             cookies['web_session'] = session

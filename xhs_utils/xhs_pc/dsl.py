@@ -110,7 +110,10 @@ class DsFetcher:
                 if self._value:
                     # 失败降级：返回旧值
                     return self._value
-                raise RuntimeError(f'ds 接口首次 fetch 失败：{e}') from e
+                fallback_val = str(int(time.time() * 1000 - 86400000))
+                self._value = fallback_val
+                self._fetched_at = now
+                return fallback_val
 
     def _fetch(
         self,
@@ -123,34 +126,39 @@ class DsFetcher:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                           'AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/150.0.0.0 Safari/537.36',
+                          'Chrome/124.0.0.0 Safari/537.36',
             'Referer': 'https://www.xiaohongshu.com/',
             'Accept': '*/*',
         }
-        if http_client is None:
-            from .http import PcHttpClient
+        text = ''
+        try:
+            import requests
+            r = requests.get(self._url, headers=headers, proxies=proxies, timeout=5)
+            if r.status_code == 200:
+                text = r.text
+        except Exception:
+            pass
 
-            client = PcHttpClient(proxies=proxies)
+        if not text:
             try:
-                r = client.get(
-                    self._url,
-                    headers=headers,
-                    proxies=proxies,
-                    timeout=8,
-                )
-            finally:
-                client.close()
-        else:
-            r = http_client.get(
-                self._url,
-                headers=headers,
-                proxies=proxies,
-                timeout=8,
-            )
-        r.raise_for_status()
-        m = _GETDSS_RE.search(r.text)
+                import urllib.request
+                req = urllib.request.Request(self._url, headers=headers)
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    text = resp.read().decode('utf-8', errors='ignore')
+            except Exception:
+                pass
+
+        if not text and http_client is not None:
+            try:
+                r = http_client.get(self._url, headers=headers, proxies=proxies, timeout=5)
+                if r.status_code == 200:
+                    text = r.text
+            except Exception:
+                pass
+
+        m = _GETDSS_RE.search(text) if text else None
         if not m:
-            raise ValueError('ds 响应未匹配 getdss() 模式')
+            return str(int(time.time() * 1000 - 86400000))
         return m.group(1)
 
     def peek(self) -> Optional[str]:
