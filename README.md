@@ -253,21 +253,14 @@ scheduler:
 
 ---
 
-## 🧸 额外说明
+## 🧸 参与贡献
 
-1. 感谢 Star ⭐ 和 Follow，项目会持续更新
-2. 作者联系方式在主页，有问题随时联系
-3. 欢迎 PR 和 Issue，也欢迎关注作者其他项目
-
-<div align="center">
-  <img src="./author/wx_pay.png" width="380px" alt="微信赞赏码">
-  <img src="./author/zfb_pay.jpg" width="380px" alt="支付宝收款码">
-</div>
+1. 欢迎提交 PR 和 Issue 共同完善平台能力。
+2. 如发现合规规则变动或接口异常，欢迎提交反馈。
 
 ---
 
 ## 📈 Star History
-
 
 <a href="https://cvcat.site/star-history/svg?repos=cv-cat/XHS_ALL_IN_ONE&type=Date">
   <picture>
@@ -276,19 +269,6 @@ scheduler:
     <img alt="Star History Chart" src="https://cvcat.site/star-history/svg?repos=cv-cat/XHS_ALL_IN_ONE&type=Date" />
   </picture>
 </a>
-
----
-
-
-## 🍔 交流群
-
-如果你对爬虫和 AI Agent 感兴趣，可以加入群聊一起讨论~
-
-ps: 请加群，人满或者过期 issue | wx 提醒 | qq提醒
-
-| group-1 | group-2 | group-3 | group-4 (2000人qq群) |
-|:--:|:--:|:--:|:--:|
-| <img width="280" alt="group1" src="https://cvcat.site/assets/group1.jpg" /> | <img width="280" alt="group2" src="https://cvcat.site/assets/group2.jpg" /> | <img width="280" alt="group3" src="https://cvcat.site/assets/group3.jpg" /> | <img width="280" alt="group3" src="https://cvcat.site/assets/group4.jpg" /> |
 
 ---
 
