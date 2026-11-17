@@ -28,15 +28,8 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/platform-select" replace />} />
-        <Route
-          path="/login"
-          element={
-            <PublicOnlyRoute>
-              <LoginPage />
-            </PublicOnlyRoute>
-          }
-        />
+        <Route path="/" element={<Navigate to="/platforms/xhs/dashboard" replace />} />
+        <Route path="/login" element={<Navigate to="/platforms/xhs/dashboard" replace />} />
         <Route
           path="/platform-select"
           element={

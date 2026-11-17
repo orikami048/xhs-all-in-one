@@ -1,62 +1,16 @@
-import { Spin } from "antd";
 import type { ReactNode } from "react";
-import { Navigate, useLocation } from "react-router-dom";
-
-import { useAuth } from "../../hooks/use-auth";
+import { Navigate } from "react-router-dom";
 
 type RouteGuardProps = {
   children: ReactNode;
 };
 
+// 免登录模式：所有受保护路由直接开放放行
 export function ProtectedRoute({ children }: RouteGuardProps) {
-  const location = useLocation();
-  const auth = useAuth();
-
-  if (auth.isChecking) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100vh",
-          background: "#0a0a0a",
-        }}
-      >
-        <Spin size="large" tip="正在验证登录状态..." />
-      </div>
-    );
-  }
-
-  if (!auth.isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
   return <>{children}</>;
 }
 
+// 登录页直接重定向到小红书面板
 export function PublicOnlyRoute({ children }: RouteGuardProps) {
-  const auth = useAuth();
-
-  if (auth.isChecking) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100vh",
-          background: "#0a0a0a",
-        }}
-      >
-        <Spin size="large" tip="正在验证登录状态..." />
-      </div>
-    );
-  }
-
-  if (auth.isAuthenticated) {
-    return <Navigate to="/platform-select" replace />;
-  }
-
-  return <>{children}</>;
+  return <Navigate to="/platforms/xhs/dashboard" replace />;
 }

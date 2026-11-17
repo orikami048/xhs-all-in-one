@@ -320,6 +320,102 @@ def retry_publish_job(
     return serialize_publish_job(job)
 
 
+@router.post("/jobs/{job_id}/mcp-publish")
+def mcp_publish_job(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    job = _get_owned_publish_job(db, current_user, job_id)
+    if job.status == "published":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该任务已处于发布完成状态")
+
+    script_path = Path(__file__).resolve().parent.parent.parent.parent / "scripts" / "xhs_mcp_workflow.py"
+    python_exe = sys.executable
+
+    job.status = "publishing"
+    db.commit()
+
+    try:
+        res = subprocess.run(
+            [python_exe, str(script_path), "--job-id", str(job.id)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            encoding="utf-8"
+        )
+        db.refresh(job)
+        if res.returncode == 0:
+            return {"ok": True, "message": "通过 AliasMode 防封环境发布成功！", "job": serialize_publish_job(job)}
+        else:
+            job.status = "failed"
+            job.publish_error = (res.stderr or res.stdout or "发布未完成")[:500]
+            db.commit()
+            return {"ok": False, "message": "发布过程发生异常", "error": res.stderr or res.stdout}
+    except subprocess.TimeoutExpired:
+        job.status = "failed"
+        job.publish_error = "发布执行超时（请检查是否在浏览器卡在验证码）"
+        db.commit()
+        return {"ok": False, "message": "发布执行超时", "error": "执行超过300秒"}
+    except Exception as e:
+        job.status = "failed"
+        job.publish_error = str(e)[:500]
+        db.commit()
+        return {"ok": False, "message": "调用失败", "error": str(e)}
+
+
+class CopilotGenerateRequest(BaseModel):
+    topic: str = Field(default="AI工具", min_length=1, max_length=120)
+
+
+@router.post("/copilot/generate")
+def generate_copilot_note(
+    req: CopilotGenerateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import sys
+    from pathlib import Path
+    scripts_dir = Path(__file__).resolve().parent.parent.parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import xhs_copilot_service
+
+    note = xhs_copilot_service.generate_note_for_topic(req.topic)
+    result = xhs_copilot_service.ingest_job_to_db(note, user_id=current_user.id)
+    job = _get_owned_publish_job(db, current_user, result["job_id"])
+    return serialize_publish_job(job)
+
+
+@router.post("/launch-browser")
+def launch_browser_for_login():
+    """Launches the Camoufox browser directly in the user desktop session for one-time scan login."""
+    import os
+    import subprocess
+    from pathlib import Path
+    
+    shortcut = Path(r"C:\Users\kami\Desktop\小红书防封浏览器.lnk")
+    if shortcut.exists():
+        try:
+            os.startfile(str(shortcut))
+            return {"ok": True, "message": "已打开防封浏览器，请在弹出的窗口中扫码登录"}
+        except Exception:
+            pass
+
+    cmd = [
+        r"D:\Tools\AliasMode\firefox\aliasmode.exe",
+        "-profile",
+        r"C:\Users\kami\.gemini\antigravity\scratch\XHS_ALL_IN_ONE\data\xhs_camoufox_profile",
+        "https://creator.xiaohongshu.com/publish/publish"
+    ]
+    subprocess.Popen(cmd)
+    return {"ok": True, "message": "已打开防封浏览器，请在弹出的窗口中扫码登录"}
+
+
 @router.post("/jobs/{job_id}/cancel")
 def cancel_publish_job(
     job_id: int,

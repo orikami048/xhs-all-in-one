@@ -760,6 +760,21 @@ export async function publishJobToCreator(jobId: number): Promise<PublishJob> {
   return response.data;
 }
 
+export async function mcpPublishJob(jobId: number): Promise<{ ok: boolean; message: string; job?: PublishJob; error?: string }> {
+  const response = await http.post<{ ok: boolean; message: string; job?: PublishJob; error?: string }>(`/publish/jobs/${jobId}/mcp-publish`);
+  return response.data;
+}
+
+export async function generateCopilotJob(topic: string = "AI工具"): Promise<PublishJob> {
+  const response = await http.post<PublishJob>(`/publish/copilot/generate`, { topic });
+  return response.data;
+}
+
+export async function launchBrowserLogin(): Promise<{ ok: boolean; message: string }> {
+  const response = await http.post<{ ok: boolean; message: string }>(`/publish/launch-browser`);
+  return response.data;
+}
+
 export async function retryPublishJob(jobId: number): Promise<PublishJob> {
   const response = await http.post<PublishJob>(`/publish/jobs/${jobId}/retry`);
   return response.data;

@@ -9,6 +9,10 @@ import {
   ReloadOutlined,
   SaveOutlined,
   SendOutlined,
+  RobotOutlined,
+  MobileOutlined,
+  ThunderboltOutlined,
+  KeyOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
@@ -21,6 +25,7 @@ import {
   Image,
   Input,
   List,
+  Modal,
   Popconfirm,
   Row,
   Select,
@@ -28,6 +33,8 @@ import {
   Spin,
   Tag,
   Typography,
+  Segmented,
+  message as antdMessage,
 } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -35,6 +42,7 @@ import { useEffect, useState } from "react";
 
 import { ComplianceGuardCard } from "../../../components/compliance/compliance-guard";
 import { PageHeader } from "../../../components/layout/app-shell";
+import { XhsMobilePreview } from "../../../components/preview/xhs-mobile-preview";
 import {
   deletePublishJob,
   fetchAccounts,
@@ -43,6 +51,9 @@ import {
   fetchPublishJobs,
   publishJobToCreator,
   updatePublishJob,
+  mcpPublishJob,
+  generateCopilotJob,
+  launchBrowserLogin,
 } from "../../../lib/api";
 import { formatShanghaiTime } from "../../../lib/time";
 import type { PlatformAccount, PublishAsset, PublishJob } from "../../../types";
@@ -99,6 +110,11 @@ export function XhsPublishPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isMcpPublishing, setIsMcpPublishing] = useState(false);
+  const [isCopilotModalOpen, setIsCopilotModalOpen] = useState(false);
+  const [isGeneratingCopilot, setIsGeneratingCopilot] = useState(false);
+  const [copilotTopic, setCopilotTopic] = useState("");
+  const [previewTab, setPreviewTab] = useState<"phone" | "meta">("phone");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -250,6 +266,43 @@ export function XhsPublishPage() {
     }
   }
 
+  async function handleMcpPublish() {
+    if (!selectedJob) return;
+    setIsMcpPublishing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      antdMessage.loading({
+        content: "🚀 正在调起 D 盘 Camoufox 防封环境全自动发布...（如遇滑块验证，请在弹出的浏览器中顺手滑动）",
+        key: "mcp-publish",
+        duration: 0,
+      });
+      const res = await mcpPublishJob(selectedJob.id);
+      if (res.ok) {
+        antdMessage.success({
+          content: "🎉 恭喜！通过 AliasMode 防封环境全自动发布成功！",
+          key: "mcp-publish",
+          duration: 5,
+        });
+        await loadJobs();
+      } else {
+        antdMessage.error({
+          content: `发布未完成: ${res.message || res.error}`,
+          key: "mcp-publish",
+          duration: 5,
+        });
+        setError(res.error || res.message);
+        await loadJobs();
+      }
+    } catch (err: unknown) {
+      const d = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      antdMessage.error({ content: d || "MCP 自动化调用失败", key: "mcp-publish", duration: 4 });
+      setError(d || "MCP 自动化调用失败");
+    } finally {
+      setIsMcpPublishing(false);
+    }
+  }
+
   async function handleDeleteJob() {
     if (!selectedJob) return;
     setError(null);
@@ -267,6 +320,38 @@ export function XhsPublishPage() {
     }
   }
 
+  async function handleRunCopilot(targetTopic?: string) {
+    const topicToUse = (targetTopic || copilotTopic || "AI生产力工具").trim();
+    setIsGeneratingCopilot(true);
+    setError(null);
+    try {
+      antdMessage.loading({
+        content: `✨ 正在全网搜寻《${topicToUse}》爆款同款，去AI感改写并合成 3:4 原生实操卡...`,
+        key: "copilot",
+        duration: 0,
+      });
+      const newJob = await generateCopilotJob(topicToUse);
+      setIsCopilotModalOpen(false);
+      setCopilotTopic("");
+      antdMessage.success({
+        content: `🎉 爆款仿写完成！已为您自动生成《${newJob.title}》，请在真机预览中确认。`,
+        key: "copilot",
+        duration: 5,
+      });
+      await loadJobs();
+      setSelectedJobId(newJob.id);
+      applyJob(newJob);
+      await loadAssets(newJob.id);
+      setPreviewTab("phone");
+    } catch (err: unknown) {
+      const d = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      antdMessage.error({ content: d || "生成失败，请重试", key: "copilot", duration: 4 });
+      setError(d || "智能搜同款生成失败");
+    } finally {
+      setIsGeneratingCopilot(false);
+    }
+  }
+
   useEffect(() => {
     void loadJobs();
     void loadAccounts();
@@ -279,13 +364,83 @@ export function XhsPublishPage() {
       <PageHeader
         eyebrow="XHS Publish"
         title="发布中心"
-        description="预览草稿内容，配置发布参数后触发 Creator 发布。内容修改请前往草稿工坊。"
+        description="预览草稿内容，配置发布参数后触发 Creator 发布。支持 AI 智能搜同款仿写与 1:1 真机效果确认。"
         action={
-          <Button icon={<ReloadOutlined />} onClick={loadJobs} loading={isLoading}>
-            刷新
-          </Button>
+          <Space>
+            <Button
+              type="primary"
+              style={{ background: "#722ed1", borderColor: "#722ed1", fontWeight: "bold" }}
+              icon={<ThunderboltOutlined />}
+              onClick={() => setIsCopilotModalOpen(true)}
+            >
+              ✨ AI 搜同款一键生成 (带预览)
+            </Button>
+            <Button
+              icon={<KeyOutlined />}
+              onClick={async () => {
+                try {
+                  const res = await launchBrowserLogin();
+                  antdMessage.success(res.message);
+                } catch {
+                  antdMessage.info("请双击桌面的【小红书防封浏览器】进行扫码登录");
+                }
+              }}
+            >
+              🔑 打开防封浏览器扫码
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={loadJobs} loading={isLoading}>
+              刷新
+            </Button>
+          </Space>
         }
       />
+
+      {/* AI 搜同款生成 Modal */}
+      <Modal
+        title={
+          <Space>
+            <ThunderboltOutlined style={{ color: "#722ed1" }} />
+            <span>AI 智能搜同款生成器 (爆款分析 + 去AI感仿写 + 3:4 实操卡)</span>
+          </Space>
+        }
+        open={isCopilotModalOpen}
+        onCancel={() => setIsCopilotModalOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+          输入你想要生成的赛道选题（如“AI工具”、“职场摸鱼”、“副业搞钱”），系统将自动搜寻小红书当前高赞同款结构，去 AI 感改写为真实第一人称种草文案，并合成 3:4 原生视觉图卡。生成后直接送入真机预览，确认无误后可一键防封全自动发布！
+        </Paragraph>
+        <Space direction="vertical" style={{ width: "100%" }} size={16}>
+          <Input.Search
+            placeholder="例如：AI生产力工具 / 搞钱副业 / 经方养生"
+            enterButton="一键搜同款并生成"
+            size="large"
+            value={copilotTopic}
+            onChange={(e) => setCopilotTopic(e.target.value)}
+            loading={isGeneratingCopilot}
+            onSearch={() => handleRunCopilot(copilotTopic)}
+          />
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>⚡ 推荐热门同款灵感：</Text>
+            <Space size={8} wrap style={{ marginTop: 8 }}>
+              {["AI工具与生产力", "打工人避坑神器", "自媒体爆款写作", "零成本搞钱技能"].map((preset) => (
+                <Tag
+                  key={preset}
+                  style={{ cursor: "pointer", padding: "4px 8px" }}
+                  color="purple"
+                  onClick={() => {
+                    setCopilotTopic(preset);
+                    void handleRunCopilot(preset);
+                  }}
+                >
+                  {preset}
+                </Tag>
+              ))}
+            </Space>
+          </div>
+        </Space>
+      </Modal>
 
       {error && <Alert type="error" message={error} showIcon closable onClose={() => setError(null)} />}
       {message && <Alert type="success" message={message} showIcon closable onClose={() => setMessage(null)} />}
@@ -387,12 +542,31 @@ export function XhsPublishPage() {
                         </Space>
                       </Col>
                       <Col>
-                        <Space>
+                        <Space wrap>
                           <Button icon={<SaveOutlined />} onClick={handleSave} loading={isSaving}>保存参数</Button>
                           <Popconfirm title="确定删除此发布任务？" onConfirm={handleDeleteJob}>
                             <Button danger icon={<DeleteOutlined />}>删除</Button>
                           </Popconfirm>
-                          <Button type="primary" icon={<SendOutlined />} onClick={handlePublish} loading={isPublishing} disabled={!canPublish}>发布</Button>
+                          <Button
+                            type="primary"
+                            size="middle"
+                            style={{ background: "#52c41a", borderColor: "#52c41a", fontWeight: "bold", boxShadow: "0 0 10px rgba(82, 196, 26, 0.4)" }}
+                            icon={<RobotOutlined />}
+                            onClick={handleMcpPublish}
+                            loading={isMcpPublishing}
+                          >
+                            🚀 MCP 防封环境全自动发布 (免配Cookie)
+                          </Button>
+                          <Button
+                            type="text"
+                            icon={<SendOutlined />}
+                            onClick={handlePublish}
+                            loading={isPublishing}
+                            disabled={!canPublish}
+                            style={{ color: "#8c8c8c", fontSize: 12 }}
+                          >
+                            传统API发布 (需Cookie)
+                          </Button>
                         </Space>
                       </Col>
                     </Row>
@@ -417,66 +591,105 @@ export function XhsPublishPage() {
                   />
 
                   <Row gutter={16}>
-                    {/* Content Preview (read-only) */}
+                    {/* Content Preview & Mobile Mockup */}
                     <Col xs={24} md={14}>
                       <Card
-                        title={<Space><EyeOutlined /><span>内容预览</span></Space>}
+                        title={
+                          <Space>
+                            <Segmented
+                              value={previewTab}
+                              onChange={(val) => setPreviewTab(val as "phone" | "meta")}
+                              options={[
+                                { label: "📱 真机效果预览", value: "phone", icon: <MobileOutlined /> },
+                                { label: "📄 排版与素材", value: "meta", icon: <EyeOutlined /> },
+                              ]}
+                            />
+                          </Space>
+                        }
                         style={panelStyle}
-                        styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid #303030" } }}
-                        extra={<Text type="secondary" style={{ fontSize: 12 }}>内容修改请前往草稿工坊</Text>}
+                        styles={{
+                          body: {
+                            ...cardBodyStyle,
+                            display: previewTab === "phone" ? "flex" : "block",
+                            justifyContent: "center",
+                            background: previewTab === "phone" ? "#0f0f12" : undefined,
+                          },
+                          header: { borderBottom: "1px solid #303030" },
+                        }}
+                        extra={
+                          previewTab === "phone" ? (
+                            <Tag color="cyan">小红书真机视网膜渲染 (3:4)</Tag>
+                          ) : (
+                            <Text type="secondary" style={{ fontSize: 12 }}>内容修改请前往草稿工坊</Text>
+                          )
+                        }
                       >
-                        <Title level={5} style={{ marginBottom: 8 }}>{selectedJob.title || "未填写标题"}</Title>
-                        <Paragraph style={{ whiteSpace: "pre-wrap", color: "rgba(255,255,255,.65)", fontSize: 13, marginBottom: 16 }}>
-                          {selectedJob.body || "暂无正文"}
-                        </Paragraph>
+                        {previewTab === "phone" ? (
+                          <XhsMobilePreview
+                            title={selectedJob.title || ""}
+                            body={selectedJob.body || ""}
+                            topics={parseTopics(topicsText)}
+                            assets={assets}
+                            authorName={
+                              accounts.find((a) => a.id === selectedAccountId)?.nickname || "小红书创作者"
+                            }
+                          />
+                        ) : (
+                          <div>
+                            <Title level={5} style={{ marginBottom: 8 }}>{selectedJob.title || "未填写标题"}</Title>
+                            <Paragraph style={{ whiteSpace: "pre-wrap", color: "rgba(255,255,255,.65)", fontSize: 13, marginBottom: 16 }}>
+                              {selectedJob.body || "暂无正文"}
+                            </Paragraph>
 
-                        {imageAssets.length > 0 && (
-                          <div style={{ marginBottom: 12 }}>
-                            <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
-                              <PictureOutlined /> 图片素材 ({imageAssets.length})
-                            </Text>
-                            <Image.PreviewGroup>
-                              <Space size={8} wrap>
-                                {imageAssets.map((asset) => (
-                                  <Image
-                                    key={asset.id}
-                                    src={asset.file_path}
-                                    width={80}
-                                    height={80}
-                                    style={{ objectFit: "cover", borderRadius: 6 }}
-                                    referrerPolicy="no-referrer"
-                                    fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjMjYyNjI2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM4YzhjOGMiIGZvbnQtc2l6ZT0iMTIiPuWbvueJhzwvdGV4dD48L3N2Zz4="
-                                  />
-                                ))}
-                              </Space>
-                            </Image.PreviewGroup>
-                          </div>
-                        )}
+                            {imageAssets.length > 0 && (
+                              <div style={{ marginBottom: 12 }}>
+                                <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
+                                  <PictureOutlined /> 图片素材 ({imageAssets.length})
+                                </Text>
+                                <Image.PreviewGroup>
+                                  <Space size={8} wrap>
+                                    {imageAssets.map((asset) => (
+                                      <Image
+                                        key={asset.id}
+                                        src={asset.file_path}
+                                        width={80}
+                                        height={80}
+                                        style={{ objectFit: "cover", borderRadius: 6 }}
+                                        referrerPolicy="no-referrer"
+                                        fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjMjYyNjI2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM4YzhjOGMiIGZvbnQtc2l6ZT0iMTIiPuWbvueJhzwvdGV4dD48L3N2Zz4="
+                                      />
+                                    ))}
+                                  </Space>
+                                </Image.PreviewGroup>
+                              </div>
+                            )}
 
-                        {videoAssets.length > 0 && (
-                          <div style={{ marginBottom: 12 }}>
-                            <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
-                              <PlayCircleOutlined /> 视频素材 ({videoAssets.length})
-                            </Text>
-                            <Space wrap>
-                              {videoAssets.map((asset) => (
-                                <Button key={asset.id} type="link" icon={<PlayCircleOutlined />} href={asset.file_path} target="_blank" rel="noreferrer" size="small">
-                                  查看视频
-                                </Button>
-                              ))}
-                            </Space>
-                          </div>
-                        )}
+                            {videoAssets.length > 0 && (
+                              <div style={{ marginBottom: 12 }}>
+                                <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
+                                  <PlayCircleOutlined /> 视频素材 ({videoAssets.length})
+                                </Text>
+                                <Space wrap>
+                                  {videoAssets.map((asset) => (
+                                    <Button key={asset.id} type="link" icon={<PlayCircleOutlined />} href={asset.file_path} target="_blank" rel="noreferrer" size="small">
+                                      查看视频
+                                    </Button>
+                                  ))}
+                                </Space>
+                              </div>
+                            )}
 
-                        {!hasAnyAsset && <Text type="secondary">暂无素材</Text>}
+                            {!hasAnyAsset && <Text type="secondary">暂无素材</Text>}
 
-                        {selectedJob.publish_options?.draft_tags && Array.isArray(selectedJob.publish_options.draft_tags) && selectedJob.publish_options.draft_tags.length > 0 && (
-                          <div style={{ marginTop: 12 }}>
-                            <Space size={[4, 4]} wrap>
-                              {(selectedJob.publish_options.draft_tags as Array<{name?: string}>).map((t, i) => (
-                                <Tag key={i} color="blue">#{t.name || ""}</Tag>
-                              ))}
-                            </Space>
+                            {selectedJob.publish_options?.draft_tags && Array.isArray(selectedJob.publish_options.draft_tags) && selectedJob.publish_options.draft_tags.length > 0 && (
+                              <div style={{ marginTop: 12 }}>
+                                <Space size={[4, 4]} wrap>
+                                  {(selectedJob.publish_options.draft_tags as Array<{name?: string}>).map((t, i) => (
+                                    <Tag key={i} color="blue">#{t.name || ""}</Tag>
+                                  ))}
+                                </Space>
+                              </div>
+                            )}
                           </div>
                         )}
                       </Card>
