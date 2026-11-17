@@ -254,6 +254,11 @@ def ingest_job_to_db(note_data: dict, user_id: int = 1) -> dict:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+    # Find active creator account
+    cursor.execute("SELECT id FROM platform_accounts WHERE platform='xhs' AND sub_type='creator' AND status='active' ORDER BY id DESC LIMIT 1")
+    acc_row = cursor.fetchone()
+    account_id = acc_row[0] if acc_row else 2
+
     publish_options = {
         "topics": note_data["tags"],
         "draft_tags": [{"id": "", "name": t} for t in note_data["tags"]],
@@ -271,7 +276,7 @@ def ingest_job_to_db(note_data: dict, user_id: int = 1) -> dict:
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
         """,
         (
-            1, None, "xhs", note_data["title"], note_data["body"],
+            account_id, None, "xhs", note_data["title"], note_data["body"],
             "immediate", json.dumps(publish_options, ensure_ascii=False), "pending", "", "", user_id
         )
     )
